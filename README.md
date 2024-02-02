@@ -76,20 +76,6 @@ CREATE TABLE ModificaProposta
     CONSTRAINT fk_UtenteP FOREIGN KEY(utenteP) REFERENCES UTENTE(idUtente)
 )
 ```
-**- NOTIFICA**
-```SQL
-CREATE TABLE NOTIFICA 
-(
-    idAutore pk_utente NOT NULL,
-    idModifica pk_utente NOT NULL,
-    data DATE,
-    ora TIME,
-    titolo varchar(80),
-    stato INTEGER DEFAULT 0,
-    FOREIGN KEY(idModifica) REFERENCES modificaproposta(idModifica),
-    FOREIGN KEY(idAutore) REFERENCES utente(idUtente)
-)
-```
 **- COLLEGAMENTO**
 ```SQL
 CREATE TABLE COLLEGAMENTO
@@ -103,47 +89,6 @@ CREATE TABLE COLLEGAMENTO
 )
 ```
 ***TRIGGER***
-
-**- Aggiunge una tupla all'interno di notifica ogni qualvolta viene proposta una modifica**
-```SQL
-CREATE OR REPLACE FUNCTION notificaM() RETURNS TRIGGER AS $$
-DECLARE
-    v_titolo VARCHAR(80);
-BEGIN
-    -- Controlla se la riga 'new' contiene valori non nulli
-    IF new.idpagina IS NOT NULL AND new.utentep IS NOT NULL AND new.autorev IS NOT NULL THEN
-        -- Recupera il titolo della pagina
-        SELECT titolo INTO v_titolo
-        FROM pagina
-        WHERE idpagina = new.idpagina;
-
-        -- Controlla se il titolo non è nullo
-        IF v_titolo IS NOT NULL THEN
-            IF new.utentep != (SELECT idautore FROM Pagina WHERE idPagina = new.idPagina) THEN
-                -- Inserisci un nuovo record nella tabella NOTIFICA
-                INSERT INTO NOTIFICA
-                    VALUES (new.autorev, new.idModifica, NOW(), NOW(), v_titolo);
-                RAISE NOTICE 'è stata proposta una modifica alla pagina ';
-                RETURN new;
-            ELSE
-                RETURN NULL;
-            END IF;
-        ELSE
-            -- Gestisci il caso in cui il titolo è nullo
-            RAISE EXCEPTION 'Titolo non trovato per idpagina: %', new.idpagina;
-        END IF;
-    ELSE
-        -- Gestisci il caso in cui la riga 'new' contiene valori nulli
-        RAISE EXCEPTION 'Valori NULL trovati nella nuova riga';
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER Notifica_modifica
-AFTER INSERT ON ModificaProposta
-FOR EACH ROW
-    EXECUTE function notificaM();
-```
 **- quando un utente scrive per la prima volta una pagina, il suo ruolo passa da _utente_ ad _autore_**
 ```SQL
 CREATE OR REPLACE FUNCTION diventaAutore() RETURNS TRIGGER AS $$
@@ -232,23 +177,6 @@ FOR EACH ROW
 WHEN (old.stato = 0)
 	EXECUTE FUNCTION settaggioDataOraValutazione();
  ```
-**- quando un modifica viene accetta o rifiutata dall'autore, lo stato della notifica viene impostato ad 1 cosi successivamente non verrà più visualizzata**
-```SQL
-CREATE OR REPLACE FUNCTION settaggioStatoNotifica() RETURNS TRIGGER
-AS $$
-BEGIN
-    UPDATE notifica SET stato = 1 WHERE idModifica = old.idModifica;
-    RETURN NEW;
-END;
-$$
-LANGUAGE PLPGSQL;
-
-CREATE OR REPLACE TRIGGER settaggioStatoNotifica
-AFTER UPDATE ON modificaProposta
-FOR EACH ROW
-WHEN (old.stato = 0 AND old.utenteP != old.autorev)
-EXECUTE FUNCTION settaggioStatoNotifica();
-```
 
 ***PROCEDURE***
 
